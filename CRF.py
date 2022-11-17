@@ -1,28 +1,20 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
-#import altair as alt
 import base64
+import time
 
-#from datetime import datetime
-#from forex_python.converter import CurrencyRates
-#from forex_python.bitcoin import BtcConverter
-
-#from statsmodels.tsa.seasonal import seasonal_decompose
-
+from datetime import datetime
 from cryptocmd import CmcScraper
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM ,Dropout
+from tensorflow.keras.layers import Dense, LSTM 
 from plotly import graph_objs as go
 from PIL import Image
-# tf.keras.datasets
 
 
 main_bg = "bg.jpg"
 main_bg_ext = "jpg"
-
 
 st.markdown(
     f"""
@@ -40,55 +32,53 @@ st.markdown(
 image = Image.open('logo.png')
 st.image(image, width=500)
 
-
-
 st.title('CryptoRush')
 st.markdown('A Web Application that enables you to predict and forecast the future value of any cryptocurrency on a daily, weekly, and monthly basis.')
 
 
-selected_ticker = st.sidebar.selectbox("Choose type of Crypto (i.e. BTC, ETH, BNB, XRP)",options=["BTC", "ETH", "BNB", "XRP"] )
 
+
+selected_ticker = st.sidebar.selectbox("Choose type of Crypto (i.e. BTC, ETH, BNB, XRP)",options=["BTC", "ETH", "BNB", "XRP"] )
 # INITIALIZE SCRAPER
 @st.cache
 def load_data(selected_ticker):
     
     init_scraper = CmcScraper(selected_ticker)
     df = init_scraper.get_dataframe()
-    #min_date = pd.to_datetime(min(df['Date']))
-    #max_date = pd.to_datetime(max(df['Date']))
-
-
     return df
 
 ### LOAD THE DATA
 df = load_data(selected_ticker)
 
-### Initialise scraper without time interval
+### Initialise scraper 
 scraper = CmcScraper(selected_ticker)
 
 ##############################################################################################
 
 
 data = scraper.get_dataframe()
+data_copy = scraper.get_dataframe()
+data['Date'] = pd.to_datetime(data['Date']).dt.date
 
 
-st.subheader('Historical data') #display
+st.subheader(f'Historical data of {selected_ticker}') #display
 st.write(data.head(5)) # display data frame
 
-####################################################################################################################
+
+###############################################################################################
 
 #DISPLAY RAW DATA TABLE
 def plot_raw_data():
 	fig = go.Figure()
 	fig.add_trace(go.Scatter(x=data['Date'], y=data['Close'], name="Close"))
-	fig.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True)
+	fig.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True, xaxis_title="Dates",yaxis_title="Closed Data Prices")
 	st.plotly_chart(fig)
 
 def plot_raw_data_log():
 	fig = go.Figure()
 	fig.add_trace(go.Scatter(x=data['Date'], y=data['Close'], name="Close"))
 	fig.update_yaxes(type="log")
-	fig.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True)
+	fig.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True, xaxis_title="Dates",yaxis_title="Closed Data Prices")
 	st.plotly_chart(fig)
 
 
@@ -100,184 +90,219 @@ else:
 
 
 
-###########################################################################################
+
+data_copy['month'] = data_copy['Date'].apply(lambda x: x.month)
+data_copy['year'] = data_copy['Date'].apply(lambda x: x.year)
+data_copy['day'] = data_copy['Date'].apply(lambda x: x.day)
+data_copy['week'] = data_copy['Date'].apply(lambda x: x.week)
+
+
+monthly=data_copy.groupby('month').agg('mean')
+monthly.reset_index(inplace=True)
+monthly = monthly.rename(columns = {'index':'month'})
+
+
+yearly=data_copy.groupby('year').agg('mean')
+yearly.reset_index(inplace=True)
+yearly = yearly.rename(columns = {'index':'year'})
+
+daily=data_copy.groupby('day').agg('mean')
+daily.reset_index(inplace=True)
+daily = daily.rename(columns = {'index':'day'})
     
-scaler = MinMaxScaler(feature_range=(0, 1)) #normalization
+weekly=data_copy.groupby('week').agg('mean')
+weekly.reset_index(inplace=True)
+weekly = weekly.rename(columns = {'index':'week'})
+    
+    
+
+    ######## Daily ######## 
+
+fig4 = go.Figure()
+fig4.add_trace(go.Scatter(y=daily['Close'], x=daily['day']))
+fig4.layout.update(title_text='Daily Data', xaxis_rangeslider_visible=True, xaxis_title="Days",yaxis_title="Daily Data Prices")
+st.plotly_chart(fig4)
+    
+  ######## Weekly ######## 
+  
+
+fig5 = go.Figure()
+fig5.add_trace(go.Scatter(y=weekly['Close'], x=weekly['week']))
+fig5.layout.update(title_text='Weekly Data', xaxis_rangeslider_visible=True, xaxis_title="Weeks",yaxis_title="Weekly Data Prices")
+st.plotly_chart(fig5)
+    
+  ######## Monthly ######## 
+  
+ 
+fig2 = go.Figure()
+fig2.add_trace(go.Scatter(y=monthly['Close'], x=monthly['month']))
+fig2.layout.update(title_text='Monthly Data', xaxis_rangeslider_visible=True, xaxis_title="Months",yaxis_title="Monthly Data Prices")
+st.plotly_chart(fig2)
+    
+    
+  ######## Yearly ######## 
+ 
+
+fig3 = go.Figure()
+fig3.add_trace(go.Scatter(y=yearly['Close'], x=yearly['year']))
+fig3.layout.update(title_text='Yearly Data', xaxis_rangeslider_visible=True, xaxis_title="Years",yaxis_title="Yearly Data Prices")
+st.plotly_chart(fig3)
+    
 
 
-scaled_data = scaler.fit_transform(data['Close'].values.reshape(-1, 1)) # get close price
 
-######### change input day label
+###########################################################################################
 
-prediction_days = int(st.sidebar.number_input('Input days:', min_value=0, max_value=365, value=60, step=1))  #number of days to base prediction
-#date=datetime.now()
-#c=CurrencyRates()
+rev_data=data.reindex(index=data.index[::-1])# reverse data from first to last- last to first
 
-#val = data['Close'].values[0]
+closed_prices_data=rev_data[['Close']].values.reshape(-1, 1) ##### get closed prices from data
 
-#b = BtcConverter() # force_decimal=True to get Decimal rates
-#late=b.get_latest_price('USD')
+Scale=MinMaxScaler()
 
-#st.sidebar.markdown("Convert USD to PHP")
-#Price=st.sidebar.number_input('USD Amount:', value=1)
-#st.sidebar.markdown("Converted USD Amount to PHP: ")
-#st.sidebar.markdown(c.convert('USD','PHP',val))
-
-#st.sidebar.markdown(f"Latest price of {selected_ticker} is")
-#st.sidebar.markdown(late)
+Scaled_data=Scale.fit(closed_prices_data)#datascaler
+X=Scaled_data.transform(closed_prices_data) #####normalizing the data
+X=X.reshape(X.shape[0],)
 
 
-#future_day = 30       #Extension
+#samples split
+X_samples=list()#for predicting data
+y_samples=list()#
 
+NumRows=len(X)
+prediction_days=10 #next day's Price Prediction is based on last how many past day's prices
+Future_Steps=int(st.sidebar.number_input('Input how many days the application will predict:', min_value=0, max_value=365, value=1, step=1)) # predicting x days from based days
 
-
-
+if st.button("Predict"):
+    
+    with st.spinner('Wait for the algorithm to finish'):
+       
+       
 ###########################################################################################
 
 # TRAINING OF DATA
-if st.button("Predict"):
-
+        for i in range(prediction_days,NumRows-Future_Steps,1):
     
+            x_sample_data=X[i-prediction_days:i]
+            y_sample_data=X[i:i+Future_Steps]
+            X_samples.append(x_sample_data)
+            y_samples.append(y_sample_data)
 
-    df_train = data[['Date','Close']]
-    df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
-    
-  
-x_train, y_train = [], []
-
-for x in range(prediction_days, len(scaled_data)  ):   #computation for prediction
-        x_train.append(scaled_data[x - prediction_days:x, 0])
-        y_train.append(scaled_data[x  , 0])
+#reshape input as 3D
+        X_data=np.array(X_samples)
+        X_data=X_data.reshape(X_data.shape[0],X_data.shape[1],1)
 
 
-x_train, y_train = np.array(x_train), np.array(y_train)
-x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+#y data is a single column only
+        y_data=np.array(y_samples)
+
+
+# num of testing data records
+        test_record=5
+#split data to train and test
+        X_train=X_data[:-test_record]
+        X_test=X_data[-test_record:]
+        y_train=y_data[:-test_record]
+        y_test=y_data[-test_record:]
+
+#define inputs for LSTM
+        Steps=X_train.shape[1]
+        Features=X_train.shape[2]
+
+
 
 ###################################################################################################
-
 # LSTM MODEL
-model = Sequential()
+        model = Sequential()
+
+#first hidden layer and LSTM layer
+        model.add(LSTM(units=50, activation='relu', input_shape=(Steps,Features),return_sequences=True))  
+
+#second layer
+        model.add(LSTM(units=25, activation='relu', input_shape=(Steps,Features),return_sequences=True))
+
+#third layer
+        model.add(LSTM(units=25, activation='relu',return_sequences=False))
+
+#Output layer
+        model.add(Dense(units=Future_Steps))
+
+#complile RNN
+        model.compile(optimizer='adam', loss='mean_squared_error')
 
 
+# measure time taken for model to train
+        StartTime=time.time()
 
-model.add(LSTM(units=50, return_sequences=True, input_shape=(x_train.shape[1], 1)))  
-model.add(Dropout(0.2)) 
+#fit the RNN to Training set
+        model.fit(X_train, y_train, epochs=25, batch_size=32)
+       
+        EndTime=time.time()
+    
+        st.success('Done!')
+    
+    
+        print("##Total time taken:" ,round((EndTime-StartTime)/60),"Minutes ##")
 
-model.add(LSTM(units=50, return_sequences=True))
-model.add(Dropout(0.2))
-
-model.add(LSTM(units=50))
-model.add(Dropout(0.2))
-
-model.add(Dense(units=1, activation='sigmoid'))
-
-model.compile(optimizer='adam', loss='mean_squared_error', metrics='mse')
-
-
-model.fit(x_train, y_train, epochs=25, batch_size=32)
-
-
-##############################################################################################
-
-# TESTING OF DATA
-exp=data.reindex(index=data.index[::-1])
-
-test_data =exp
-
-actual_prices = test_data['Close'].values
-
-total_dataset = pd.concat((data['Close'], test_data['Close']), axis=0)  
-
-model_inputs = total_dataset[len(total_dataset) - len(test_data) - prediction_days:].values
-
-model_inputs = model_inputs.reshape(-1, 1)
-model_inputs = scaler.fit_transform(model_inputs)
-
-x_test = []
-
-for x in range(prediction_days, len(model_inputs)):
-    x_test.append(model_inputs[x - prediction_days:x, 0])
-
-x_test = np.array(x_test)
-x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
-
-prediction_prices = model.predict(x_test)
-prediction_prices = scaler.inverse_transform(prediction_prices)
 
 #############################################################################################
 
-# PREDICT NEXT DAY
+# PREDICT Number of days
+        for i in range(prediction_days,NumRows,1):
+            
+            X_days=rev_data[i-prediction_days:]
+        
+        Last_X_Days_Prices=closed_prices_data[-prediction_days:]
+ 
+#Days of predicted values
+        Dates = pd.DataFrame(pd.date_range(datetime.today(), periods=Future_Steps).tolist(), columns=['Date'])
 
-#need to be dataframe to plot
+        Dates['Date'] = pd.to_datetime(Dates['Date']).dt.date
+   
+ 
+# Reshaping the data to (-1,1 )because its a single entry
+        Last_X_Days_Prices=Last_X_Days_Prices.reshape(-1, 1)
+ 
+# Scaling the data on the same level on which model was trained
+        X_test=Scaled_data.transform(Last_X_Days_Prices)
+ 
+        NumberofSamples=1
+        TimeSteps=X_test.shape[0]
+        NumberofFeatures=X_test.shape[1]
 
-real_data=[model_inputs[len(model_inputs)+ 1 - prediction_days:len(model_inputs) + 1, 0]]
-real_data=np.array(real_data)
-real_data=np.reshape(real_data, (real_data.shape[0], real_data.shape[1] , 1))
+# Reshaping the data as 3D input
+        X_test=X_test.reshape(NumberofSamples,TimeSteps,NumberofFeatures)
+ 
+# Generating the predictions for next X days
+        Next_XDays_Price = model.predict(X_test)
+ 
 
-#real_data_frame=pd.DataFrame()
-
-
-prediction=model.predict(real_data)
-prediction=scaler.inverse_transform(prediction)
-
-print(prediction)
-
-
-pred = pd.DataFrame(prediction_prices,columns=['predicted'])
-
-reversing=pred.reindex(index=pred.index[::-1])
-############################################################################################
-
-
-#PLOT
-
-plt.plot(actual_prices, color='red', label='Actual Prices')
-plt.plot(prediction_prices, color='green', label='Predicted Prices')
-#plt.plot(prediction, color='red', label='Predicted Prices')
-plt.title('price prediction')
-plt.xlabel('Time')
-plt.ylabel('Price')
-plt.legend(loc='upper left')
-plt.show()
-#print(df.head(5))
-
-
-
-####################################################################################################################
+# Generating the prices in original scale
+        Next_XDays_Price = Scaled_data.inverse_transform(Next_XDays_Price)
+        Predicted_Multiple_Data = pd.DataFrame(Next_XDays_Price)
+       
+     
+################################################################################################
 
     
-st.subheader('Forecast data')
-#st.write(.head())
-st.write(reversing.head(5))
+        st.subheader(f'Plot data using {prediction_days} days from historical data')
+        st.write(X_days.head(prediction_days))
 
-st.subheader(f'Forecast plot using {prediction_days} days from historical data')
 
-fig1 = go.Figure()
-fig1.add_trace(go.Scatter(y=reversing['predicted'], x=data['Date']))
-fig1.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True)
-st.plotly_chart(fig1)
+        fig1 = go.Figure()
+        fig1.add_trace(go.Scatter(y=X_days['Close'], x=X_days['Date']))
+        fig1.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True, xaxis_title="Dates",yaxis_title="Prices")
+        st.plotly_chart(fig1)
 
 
 
+        st.subheader("Forecast components")
+        
+        st.subheader(f'Predicted values for {Future_Steps} days')
+        st.write(Predicted_Multiple_Data .head())
 
-#st.subheader("Forecast components")
+        fig6 = go.Figure()
+        fig6.add_trace(go.Scatter(y=Predicted_Multiple_Data .iloc[0], x=Dates['Date']))
+        fig6.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True, xaxis_title="Dates",yaxis_title="Predicted Prices")
+        st.plotly_chart(fig6)
 
-data['month'] = data['Date'].apply(lambda x: x.month)
-data['year'] = data['Date'].apply(lambda x: x.year)
-data['day'] = data['Date'].apply(lambda x: x.day)
-
-
-data.groupby('month').agg('mean').plot()
-plt.title('Monthly')
-plt.xlabel('Month')
-plt.legend(loc='upper right')
-
-data.groupby('year').agg('mean').plot()
-plt.title('Yearly')
-plt.xlabel('Year')
-plt.legend(loc='upper right')
-
-data.groupby('day').agg('mean').plot()
-plt.title('Daily')
-plt.xlabel('Days')
-plt.legend(loc='upper right')
+   
